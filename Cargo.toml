@@ -7,3 +7,4 @@ authors = ["vjrao, rphmeier <rphmeier@gmail.com>"]
 glium = "^0.13"
 glutin = "^0.4"
 jobsteal = "^0.2"
+rand = "0.3"
