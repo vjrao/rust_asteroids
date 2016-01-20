@@ -13,6 +13,10 @@ impl Asteroid {
         self.position.1 += self.velocity.1;
     }
     
+    pub fn still_alive(&self, width: f32, height: f32) -> bool {
+        !(self.position.0 < -width || self.position.0 > width || self.position.1 < -height || self.position.1 > height)
+    }
+    
     pub fn new() -> Asteroid {
         Asteroid { position : (0.0, 0.0), velocity : (0.0, 0.0), radius : 10.0 }
     }
@@ -48,10 +52,6 @@ impl Shape for Asteroid {
         for index in INDICES.iter() {
             index_list.push(*index + offset);
         }
-    }
-
-    fn still_alive(&self) -> bool {
-        !(self.position.0 < -100.0 || self.position.0 > 100.0 || self.position.1 < -100.0 || self.position.1 > 100.0)
     }
 }
 

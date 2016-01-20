@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate glium;
+extern crate glutin;
 extern crate rand;
 
 use glium::{DisplayBuild, Surface};
@@ -17,7 +18,7 @@ pub struct Vertex {
 }
 
 fn main() {
-    let display = glium::glutin::WindowBuilder::new().build_glium().unwrap();
+    let display = glium::glutin::WindowBuilder::new().with_fullscreen(glutin::get_primary_monitor()).build_glium().unwrap();
 
     implement_vertex!(Vertex, position);
 
@@ -26,11 +27,10 @@ fn main() {
 
 	in vec2 position;
 
-	uniform mat4 perspective;
 	uniform mat4 matrix;
 
 	void main() {
-		gl_Position = perspective * matrix * vec4(position, 0.0, 1.0);
+		gl_Position = matrix * vec4(position, 0.0, 1.0);
 	}
 	"#;
 
@@ -46,48 +46,33 @@ fn main() {
 
     let program = glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None).unwrap();
 
-    let mut asteroids = vec![ Asteroid::new_with_attr((0.0, 0.0), (0.0, 0.1), 10.0), Asteroid::new_with_attr((50.0, 50.0), (-0.1, -0.1), 10.0)];
+    let mut asteroids: Vec<Asteroid>  = vec![ Asteroid::new_with_attr((0.0, 0.0), (0.0, 0.0), 100.0)];
 
     let mut mouse_pos : (i32, i32) = (0, 0);
 
     let pos_range = Range::new(-100f32, 100f32);
     let vel_range = Range::new(-1f32, 1f32);
-    let rad_range = Range::new(1f32, 50f32);
+    let rad_range = Range::new(100f32, 500f32);
     let mut rng = rand::thread_rng();
     
     loop {
 
-        asteroids.retain(|ref a| a.still_alive());
+        let mut target = display.draw();
+        let (width, height) = target.get_dimensions();
+        target.clear_color(0.0, 0.0, 0.0, 1.0);
+        
+        asteroids.retain(|ref a| a.still_alive(width as f32,
+                                               height as f32));
         for ast in asteroids.iter_mut() {
             ast.update();
         }
         
-        let mut target = display.draw();
-        let (width, height) = target.get_dimensions();
-        target.clear_color(0.0, 0.0, 0.0, 1.0);
-
         let matrix = [
-            [0.01, 0.0, 0.0, 0.0],
-            [0.0, 0.01, 0.0, 0.0],
-            [0.0, 0.0, 0.01, 0.0],
-            [0.0, 0.0, 2.0, 1.0f32],
+            [1.0 / width as f32, 0.0, 0.0, 0.0],
+            [0.0, 1.0 / height as f32, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0f32],
             ];
-
-        // Perspective Matrix
-        let perspective = {
-            let aspect_ratio = height as f32 / width as f32;
-
-            let fov: f32 = 3.141592 / 3.0;
-
-            let f = 1.0 / (fov / 2.0).tan();
-
-            [
-                [f*aspect_ratio, 0.0, 0.0 , 0.0],
-                [      0.0     , f  , 0.0 , 0.0],
-                [      0.0     , 0.0, 1.0, 1.0],
-                [      0.0     , 0.0, -1.0 , 0.0],
-                ]
-        };
 
         // Asteroid
         let mut vertex_list : Vec<Vertex> = Vec::with_capacity(360 * asteroids.len());
@@ -101,7 +86,7 @@ fn main() {
         let indices = glium::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList, &index_list).unwrap();
         
         target.draw(&positions, &indices, &program,
-                    &uniform!{perspective: perspective, matrix: matrix},
+                    &uniform!{matrix: matrix},
                     &Default::default()).unwrap();
                     
         target.finish().unwrap();
@@ -119,8 +104,10 @@ fn main() {
                 glium::glutin::Event::MouseInput(glium::glutin::ElementState::Pressed, glium::glutin::MouseButton::Left) => {
                     let w = width as f32;
                     let h = height as f32;
-                    let tpos = ( 100.0 * ((mouse_pos.0 as f32) / w - 0.5), 100.0 * ((mouse_pos.1 as f32) / h - 0.5) );
-                    asteroids.push(Asteroid::new_with_attr(tpos,
+                    let tpos = ( 100.0 * ((mouse_pos.0 as f32) / w - 0.5), -100.0 * ((mouse_pos.1 as f32) / h - 0.5) );
+                    println!("Mouse: ({}, {}); Window: ({}, {}); Coords: ({}, {})", mouse_pos.0, mouse_pos.1, width, height, tpos.0, tpos.1);
+                    asteroids.push(Asteroid::new_with_attr(
+                        (2.0 * (mouse_pos.0 as f32 - w/2.0), 2.0 * (h / 2.0 - mouse_pos.1 as f32)),
                         (vel_range.ind_sample(&mut rng), vel_range.ind_sample(&mut rng)),
                         rad_range.ind_sample(&mut rng) ));
                 },
