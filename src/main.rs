@@ -7,10 +7,11 @@ use glium::{DisplayBuild, Surface};
 use glium::glutin::VirtualKeyCode;
 use rand::distributions::{IndependentSample, Range};
 
-mod shape;
-use shape::Shape;
 mod asteroid;
 use asteroid::Asteroid;
+
+use std::f32::consts::PI;
+pub const DEG_TO_RAD : f32 = PI / 180.0;
 
 #[derive(Copy, Clone, Default)]
 pub struct Vertex {
@@ -28,9 +29,13 @@ fn main() {
 	in vec2 position;
 
 	uniform mat4 matrix;
+    uniform vec2 offset;
+    uniform float radius;
 
 	void main() {
-		gl_Position = matrix * vec4(position, 0.0, 1.0);
+        vec2 scaled_pos = position * radius;
+        vec2 final_pos = scaled_pos + offset;
+		gl_Position = matrix * vec4(final_pos, 0.0, 1.0);
 	}
 	"#;
 
@@ -50,10 +55,20 @@ fn main() {
 
     let mut mouse_pos : (i32, i32) = (0, 0);
 
-    let pos_range = Range::new(-100f32, 100f32);
     let vel_range = Range::new(-1f32, 1f32);
     let rad_range = Range::new(100f32, 500f32);
     let mut rng = rand::thread_rng();
+    
+    let circle_vertices = (0..360)
+        .map(|ang| (ang as f32) * DEG_TO_RAD)
+        .map(|ang| Vertex {
+            position: (ang.cos(), ang.sin()),
+        }).collect::<Vec<_>>();
+        
+    let circle = glium::VertexBuffer::new(&display, &circle_vertices).unwrap();
+    let indices = glium::IndexBuffer::new(&display, 
+        glium::index::PrimitiveType::TrianglesList,
+        &asteroid::INDICES).unwrap();
     
     loop {
 
@@ -74,26 +89,21 @@ fn main() {
             [0.0, 0.0, 0.0, 1.0f32],
             ];
 
-        // Asteroid
-        let mut vertex_list : Vec<Vertex> = Vec::with_capacity(360 * asteroids.len());
-        let mut index_list : Vec<u16> = Vec::with_capacity(1074 * asteroids.len());
+        // draw each asteroid.
         for ast in asteroids.iter() {
-            Asteroid::indices(&mut index_list, vertex_list.len() as u16);
-            ast.vertices(&mut vertex_list);
+            let pos = ast.pos();
+            let radius = ast.radius();
+            
+            target.draw(&circle, &indices, &program,
+                        &uniform!{matrix: matrix, offset: pos, radius: radius},
+                        &Default::default()).unwrap();
         }
-        
-        let positions = glium::VertexBuffer::new(&display, &vertex_list).unwrap();
-        let indices = glium::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList, &index_list).unwrap();
-        
-        target.draw(&positions, &indices, &program,
-                    &uniform!{matrix: matrix},
-                    &Default::default()).unwrap();
                     
         target.finish().unwrap();
 
         for event in display.poll_events() {
             match event {
-                glium::glutin::Event::KeyboardInput(a, b, Some(c)) => {
+                glium::glutin::Event::KeyboardInput(_, _, Some(c)) => {
                     if c == VirtualKeyCode::Escape {
                         return;
                     }

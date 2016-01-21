@@ -1,5 +1,3 @@
-use super::Vertex;
-
 pub struct Asteroid {
     position: (f32, f32),
     velocity: (f32, f32),
@@ -13,6 +11,12 @@ impl Asteroid {
         self.position.1 += self.velocity.1;
     }
     
+    pub fn pos(&self) -> (f32, f32) {
+        self.position.clone()
+    }
+    
+    pub fn radius(&self) -> f32 { self.radius }
+    
     pub fn still_alive(&self, width: f32, height: f32) -> bool {
         !(self.position.0 < -width || self.position.0 > width || self.position.1 < -height || self.position.1 > height)
     }
@@ -24,34 +28,6 @@ impl Asteroid {
     pub fn new_with_attr(pos: (f32, f32), vel : (f32, f32), rad : f32)
                          -> Asteroid {
         Asteroid { position : pos, velocity : vel, radius : rad }
-    }
-}
-
-use shape::Shape;
-use std::f32::consts::PI;
-pub const DEG_TO_RAD : f32 = PI / 180.0;
-
-impl Shape for Asteroid {
-    
-    fn vertices(&self, vertex_list : &mut Vec<Vertex>) {
-        let mut vertices : [Vertex; 360] = [Default::default(); 360];
-        fn deg_to_rad(deg : usize) -> f32 {
-            (deg as f32) * DEG_TO_RAD
-        }
-        for ang in 0..360 {
-            let fang = deg_to_rad(ang);
-            vertices[ang] = Vertex { position:
-                                     ( self.position.0 + self.radius * fang.cos() ,
-                                      self.position.1 + self.radius * fang.sin() ) };
-        }
-
-        vertex_list.extend(vertices.iter());
-    }
-
-    fn indices(index_list : &mut Vec<u16>, offset : u16) {
-        for index in INDICES.iter() {
-            index_list.push(*index + offset);
-        }
     }
 }
 
