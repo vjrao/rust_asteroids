@@ -4,7 +4,9 @@ version = "0.1.0"
 authors = ["vjrao, rphmeier <rphmeier@gmail.com>"]
 
 [dependencies]
-glium = "^0.13"
-glutin = "^0.4"
-jobsteal = "^0.2"
+glium = "0.13"
+glutin = "0.4"
 rand = "0.3"
+
+[dependencies.engine]
+git = "https://github.com/rphmeier/rust_toy_engine.git"
