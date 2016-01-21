@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate glium;
+
+extern crate engine;
 extern crate glutin;
 extern crate rand;
 
