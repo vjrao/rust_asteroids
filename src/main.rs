@@ -1,15 +1,17 @@
 #[macro_use]
 extern crate glium;
+extern crate glutin;
 extern crate rand;
 
 use glium::{DisplayBuild, Surface};
 use glium::glutin::VirtualKeyCode;
 use rand::distributions::{IndependentSample, Range};
 
-mod shape;
-use shape::Shape;
 mod asteroid;
 use asteroid::Asteroid;
+
+use std::f32::consts::PI;
+pub const DEG_TO_RAD: f32 = PI / 180.0;
 
 #[derive(Copy, Clone, Default)]
 pub struct Vertex {
@@ -17,115 +19,126 @@ pub struct Vertex {
 }
 
 fn main() {
-    let display = glium::glutin::WindowBuilder::new().build_glium().unwrap();
+    let display = glium::glutin::WindowBuilder::new()
+                      .with_fullscreen(glutin::get_primary_monitor())
+                      .build_glium()
+                      .unwrap();
 
     implement_vertex!(Vertex, position);
 
     let vertex_shader_src = r#"
-	#version 140
+    #version 140
 
-	in vec2 position;
+    in vec2 position;
 
-	uniform mat4 perspective;
-	uniform mat4 matrix;
+    uniform mat4 matrix;
+    uniform vec2 offset;
+    uniform float radius;
 
-	void main() {
-		gl_Position = perspective * matrix * vec4(position, 0.0, 1.0);
-	}
-	"#;
+    void main() {
+        vec2 scaled_pos = position * radius;
+        vec2 final_pos = scaled_pos + offset;
+        gl_Position = matrix * vec4(final_pos, 0.0, 1.0);
+    }
+    "#;
 
     let fragment_shader_src = r#"
-	#version 140
+    #version 140
 
-	out vec4 color;
+    out vec4 color;
 
-	void main() {
-		color = vec4(0.5, 0.5, 0.5, 1.0);
-	}
-	"#;
+    void main() {
+        color = vec4(0.5, 0.5, 0.5, 1.0);
+    }
+    "#;
 
-    let program = glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None).unwrap();
+    let program = glium::Program::from_source(&display,
+                                              vertex_shader_src,
+                                              fragment_shader_src,
+                                              None)
+                      .unwrap();
 
-    let mut asteroids = vec![ Asteroid::new_with_attr((0.0, 0.0), (0.0, 0.1), 10.0), Asteroid::new_with_attr((50.0, 50.0), (-0.1, -0.1), 10.0)];
+    let mut asteroids: Vec<Asteroid> = vec![Asteroid::new_with_attr((0.0, 0.0), (0.0, 0.0), 100.0)];
 
-    let mut mouse_pos : (i32, i32) = (0, 0);
+    let mut mouse_pos: (i32, i32) = (0, 0);
 
-    let pos_range = Range::new(-100f32, 100f32);
     let vel_range = Range::new(-1f32, 1f32);
-    let rad_range = Range::new(1f32, 50f32);
+    let rad_range = Range::new(100f32, 500f32);
     let mut rng = rand::thread_rng();
-    
+
+    let circle_vertices = (0..360)
+                              .map(|ang| (ang as f32) * DEG_TO_RAD)
+                              .map(|ang| Vertex { position: (ang.cos(), ang.sin()) })
+                              .collect::<Vec<_>>();
+
+    let circle = glium::VertexBuffer::new(&display, &circle_vertices).unwrap();
+    let indices = glium::IndexBuffer::new(&display,
+                                          glium::index::PrimitiveType::TrianglesList,
+                                          &asteroid::INDICES)
+                      .unwrap();
+
     loop {
 
-        asteroids.retain(|ref a| a.still_alive());
-        for ast in asteroids.iter_mut() {
-            ast.update();
-        }
-        
         let mut target = display.draw();
         let (width, height) = target.get_dimensions();
         target.clear_color(0.0, 0.0, 0.0, 1.0);
 
-        let matrix = [
-            [0.01, 0.0, 0.0, 0.0],
-            [0.0, 0.01, 0.0, 0.0],
-            [0.0, 0.0, 0.01, 0.0],
-            [0.0, 0.0, 2.0, 1.0f32],
-            ];
-
-        // Perspective Matrix
-        let perspective = {
-            let aspect_ratio = height as f32 / width as f32;
-
-            let fov: f32 = 3.141592 / 3.0;
-
-            let f = 1.0 / (fov / 2.0).tan();
-
-            [
-                [f*aspect_ratio, 0.0, 0.0 , 0.0],
-                [      0.0     , f  , 0.0 , 0.0],
-                [      0.0     , 0.0, 1.0, 1.0],
-                [      0.0     , 0.0, -1.0 , 0.0],
-                ]
-        };
-
-        // Asteroid
-        let mut vertex_list : Vec<Vertex> = Vec::with_capacity(360 * asteroids.len());
-        let mut index_list : Vec<u16> = Vec::with_capacity(1074 * asteroids.len());
-        for ast in asteroids.iter() {
-            Asteroid::indices(&mut index_list, vertex_list.len() as u16);
-            ast.vertices(&mut vertex_list);
+        asteroids.retain(|ref a| a.still_alive(width as f32, height as f32));
+        for ast in asteroids.iter_mut() {
+            ast.update();
         }
-        
-        let positions = glium::VertexBuffer::new(&display, &vertex_list).unwrap();
-        let indices = glium::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList, &index_list).unwrap();
-        
-        target.draw(&positions, &indices, &program,
-                    &uniform!{perspective: perspective, matrix: matrix},
-                    &Default::default()).unwrap();
-                    
+
+        let matrix = [[1.0 / width as f32, 0.0, 0.0, 0.0],
+                      [0.0, 1.0 / height as f32, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 1.0f32]];
+
+        // draw each asteroid.
+        for ast in asteroids.iter() {
+            let pos = ast.pos();
+            let radius = ast.radius();
+
+            target.draw(&circle,
+                        &indices,
+                        &program,
+                        &uniform!{matrix: matrix, offset: pos, radius: radius},
+                        &Default::default())
+                  .unwrap();
+        }
+
         target.finish().unwrap();
 
         for event in display.poll_events() {
             match event {
-                glium::glutin::Event::KeyboardInput(a, b, Some(c)) => {
+                glium::glutin::Event::KeyboardInput(_, _, Some(c)) => {
                     if c == VirtualKeyCode::Escape {
                         return;
                     }
-                },
+                }
                 glium::glutin::Event::MouseMoved((x, y)) => {
                     mouse_pos = (x, y);
-                },
-                glium::glutin::Event::MouseInput(glium::glutin::ElementState::Pressed, glium::glutin::MouseButton::Left) => {
+                }
+                glium::glutin::Event::MouseInput(glium::glutin::ElementState::Pressed,
+                                                 glium::glutin::MouseButton::Left) => {
                     let w = width as f32;
                     let h = height as f32;
-                    let tpos = ( 100.0 * ((mouse_pos.0 as f32) / w - 0.5), 100.0 * ((mouse_pos.1 as f32) / h - 0.5) );
-                    asteroids.push(Asteroid::new_with_attr(tpos,
-                        (vel_range.ind_sample(&mut rng), vel_range.ind_sample(&mut rng)),
-                        rad_range.ind_sample(&mut rng) ));
-                },
-                glium::glutin::Event::Closed =>  return,
-                _ => ()
+                    let tpos = (100.0 * ((mouse_pos.0 as f32) / w - 0.5),
+                                -100.0 * ((mouse_pos.1 as f32) / h - 0.5));
+                    println!("Mouse: ({}, {}); Window: ({}, {}); Coords: ({}, {})",
+                             mouse_pos.0,
+                             mouse_pos.1,
+                             width,
+                             height,
+                             tpos.0,
+                             tpos.1);
+                    asteroids.push(Asteroid::new_with_attr((2.0 * (mouse_pos.0 as f32 - w / 2.0),
+                                                            2.0 * (h / 2.0 - mouse_pos.1 as f32)),
+                                                           (vel_range.ind_sample(&mut rng),
+                                                            vel_range.ind_sample(&mut rng)),
+                                                           rad_range.ind_sample(&mut rng)));
+                }
+                glium::glutin::Event::Closed => return,
+                _ => (),
             }
         }
     }
